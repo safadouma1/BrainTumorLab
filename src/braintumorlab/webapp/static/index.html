@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrainTumorLab</title>
+<link rel="stylesheet" href="static/app.css">
+<script src="static/vendor/chart.umd.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./static/vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" fill="none" stroke="url(#g)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="64" y2="64"><stop stop-color="#4f7cff"/><stop offset="1" stop-color="#14d3c4"/></linearGradient></defs>
+        <path d="M30 10c-5-3-12 0-12 6-6 0-9 6-6 11-5 3-4 11 2 12-1 6 5 11 11 8 2 4 5 5 5 5V10z"/>
+        <path d="M34 10c5-3 12 0 12 6 6 0 9 6 6 11 5 3 4 11-2 12 1 6-5 11-11 8-2 4-5 5-5 5V10z"/>
+        <path d="M22 22c3 0 4 3 8 3M20 32c4-1 6 2 10 1M23 42c2-2 5-1 7-2M42 22c-3 0-4 3-8 3M44 32c-4-1-6 2-10 1M41 42c-2-2-5-1-7-2"/>
+      </svg>
+      <h1>BrainTumorLab</h1>
+      <p>AI-powered brain tumor analysis</p>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-card"><b>Mini project</b>Results are produced by models trained on BraTS 2020. Not a medical device.</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search" placeholder="Search patient (e.g. BraTS20_Training_001)..." autocomplete="off">
+        <div class="results" id="search-results"></div>
+      </div>
+      <span class="chip" id="cur-patient">No patient selected</span>
+      <div class="spacer"></div>
+      <span class="chip" id="device-chip"><span class="dot"></span>…</span>
+    </header>
+
+    <!-- 1. DASHBOARD -->
+    <section class="page" id="page-dashboard">
+      <div class="page-head"><div><h2>Dashboard</h2><p>Dataset overview, recent analyses and model performance. All values are computed from your data.</p></div></div>
+      <div class="grid g4" id="kpis"></div>
+      <div class="grid g3" style="margin-top:16px">
+        <div class="panel span2"><h3 data-icon="clock">Recent analyses<span class="right" id="recent-count"></span></h3><div id="recent"></div></div>
+        <div class="panel"><h3 data-icon="pie">Tumor grade</h3><div class="chart-box"><canvas id="ch-grade"></canvas></div></div>
+      </div>
+      <div class="grid g3" style="margin-top:16px">
+        <div class="panel"><h3 data-icon="bars">Whole-tumor volume (mL)<span class="right" id="vol-status"></span></h3><div class="chart-box"><canvas id="ch-vol"></canvas></div></div>
+        <div class="panel"><h3 data-icon="pie">Mean tumor composition</h3><div class="chart-box"><canvas id="ch-comp"></canvas></div></div>
+        <div class="panel"><h3 data-icon="cpu">Models</h3><div id="model-status"></div></div>
+      </div>
+    </section>
+
+    <!-- 2. MRI ANALYSIS -->
+    <section class="page" id="page-analysis">
+      <div class="page-head"><div><h2>MRI Analysis</h2><p>Browse the 4 MRI sequences in axial, coronal and sagittal planes. Click an image to move the crosshair.</p></div>
+        <button class="btn primary" id="btn-upload" data-icon="upload">Import MRI (NIfTI / DICOM)</button></div>
+      <div class="split-view">
+        <div class="panel"><h3 data-icon="users">Patients<span class="right" id="plist-count"></span></h3>
+          <div class="toolbar" style="margin-bottom:8px"><select id="plist-split"><option value="">All splits</option><option>train</option><option>val</option><option>test</option><option value="upload">uploads</option></select></div>
+          <div class="plist" id="plist"></div></div>
+        <div class="panel">
+          <div class="toolbar">
+            <div class="seg" id="mod-seg"></div>
+            <select id="ov-source"><option value="none">No overlay</option><option value="gt">Ground truth</option></select>
+            <label class="ctl" style="width:130px"><span>Overlay opacity <b id="ov-alpha-v">0.45</b></span><input type="range" id="ov-alpha" min="0" max="1" step="0.05" value="0.45"></label>
+            <label class="ctl" style="width:130px"><span>Contrast <b id="win-v">0-255</b></span><input type="range" id="win" min="40" max="255" value="255"></label>
+          </div>
+          <div class="viewer" id="viewer-a"></div>
+          <div class="legend" style="margin-top:12px"><span><i style="background:var(--ncr)"></i>NCR/NET (label 1)</span><span><i style="background:var(--ed)"></i>Edema ED (label 2)</span><span><i style="background:var(--et)"></i>Enhancing ET (label 4)</span></div>
+        </div>
+        <div class="panel info" id="pinfo"><div class="empty">Select a patient</div></div>
+      </div>
+    </section>
+
+    <!-- 3. AI SEGMENTATION -->
+    <section class="page" id="page-segmentation">
+      <div class="page-head"><div><h2>AI Segmentation</h2><p>Original MRI, ground truth and 3D model prediction on the same slice, with BraTS region metrics.</p></div></div>
+      <div class="panel">
+        <div class="toolbar">
+          <select id="seg-model"></select>
+          <button class="btn primary" id="btn-seg" data-icon="play">Run segmentation</button>
+          <div class="seg" id="seg-plane"></div>
+          <div class="seg" id="seg-mod"></div>
+          <div class="spacer"></div>
+          <div class="legend"><span><i style="background:var(--ncr)"></i>NCR</span><span><i style="background:var(--ed)"></i>ED</span><span><i style="background:var(--et)"></i>ET</span>
+            <span>| Error map:</span><span><i style="background:#14d3c4"></i>TP</span><span><i style="background:#f43f5e"></i>FP</span><span><i style="background:#4f7cff"></i>FN</span></div>
+        </div>
+        <div id="seg-empty"></div>
+        <div class="grid g4" id="seg-views"></div>
+        <label class="ctl" style="margin-top:10px"><span>Slice <b id="seg-slice-v">-</b></span><input type="range" id="seg-slice" min="0" max="1" value="0"></label>
+      </div>
+      <div class="grid g2" style="margin-top:16px">
+        <div class="panel"><h3 data-icon="target">Metrics (prediction vs ground truth)<span class="right" id="seg-time"></span></h3><div id="seg-metrics"><div class="empty">Run a model to compute Dice, IoU and HD95.</div></div></div>
+        <div class="panel"><h3 data-icon="bars">Dice per region</h3><div class="chart-box"><canvas id="ch-seg"></canvas></div></div>
+      </div>
+    </section>
+
+    <!-- 4. 3D -->
+    <section class="page" id="page-3d">
+      <div class="page-head"><div><h2>3D Visualization</h2><p>Surface reconstruction (marching cubes) of the brain and the tumor sub-regions. Drag to rotate, scroll to zoom.</p></div></div>
+      <div class="grid" style="grid-template-columns:minmax(0,1fr) 300px">
+        <div class="panel" style="padding:10px"><div id="three"><span class="hint">Left drag: rotate · Right drag: pan · Wheel: zoom</span></div></div>
+        <div class="panel">
+          <h3 data-icon="layers">Layers</h3>
+          <label class="ctl"><span>Segmentation source</span><select id="mesh-source"><option value="gt">Ground truth</option></select></label>
+          <div id="mesh-layers" style="display:flex;flex-direction:column;gap:10px;margin:14px 0"></div>
+          <label class="ctl"><span>Brain opacity <b id="brain-op-v">0.15</b></span><input type="range" id="brain-op" min="0" max="1" step="0.05" value="0.15"></label>
+          <label class="ctl" style="margin-top:10px"><span>Edema opacity <b id="ed-op-v">0.45</b></span><input type="range" id="ed-op" min="0" max="1" step="0.05" value="0.45"></label>
+          <div class="toolbar" style="margin-top:14px"><label class="check"><input type="checkbox" id="autorot" checked>Auto-rotate</label>
+            <button class="btn" id="btn-reset3d" data-icon="refresh">Reset</button><button class="btn" id="btn-shot" data-icon="camera">PNG</button></div>
+          <div id="mesh-stats" class="note"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. RADIOMICS -->
+    <section class="page" id="page-radiomics">
+      <div class="page-head"><div><h2>Radiomics</h2><p>Shape, intensity (first order) and texture (GLCM) features of the tumor regions.</p></div>
+        <div class="toolbar"><select id="rad-source"><option value="gt">Ground truth</option></select><button class="btn primary" id="btn-rad" data-icon="play">Compute</button><button class="btn" id="btn-rad-csv" data-icon="download">CSV</button></div></div>
+      <div id="rad-out"><div class="empty">Select a patient and click <b>Compute</b>.</div></div>
+    </section>
+
+    <!-- 6. GENERATION -->
+    <section class="page" id="page-generation">
+      <div class="page-head"><div><h2>MRI Generation</h2><p>Med-DDPM conditional diffusion model: generate a T2 slice and compare it with the real T2 (PSNR, SSIM).</p></div></div>
+      <div id="gen-warn"></div>
+      <div class="grid" style="grid-template-columns:320px minmax(0,1fr)">
+        <div class="panel">
+          <h3 data-icon="sliders">Settings</h3>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <label class="ctl"><span>Patient (Med-DDPM dataset)</span><select id="gen-pid"></select></label>
+            <label class="ctl"><span>Mode</span><select id="gen-mode">
+              <option value="synthesis">Synthesis — T2 from noise (missing modality)</option>
+              <option value="img2img">Img2img — partial regeneration</option>
+              <option value="postop">Scenario G2 — post-operative</option>
+              <option value="progression">Scenario G3 — progression</option>
+              <option value="response">Scenario G4 — treatment response</option></select></label>
+            <label class="ctl"><span>Slice <b id="gen-slice-v">tumor</b></span><input type="range" id="gen-slice" min="0" max="1" value="0"></label>
+            <label class="ctl"><span>Strength <b id="gen-str-v">0.30</b></span><input type="range" id="gen-str" min="0.02" max="1" step="0.02" value="0.3"></label>
+            <label class="ctl"><span>DDIM steps <b id="gen-steps-v">50</b></span><input type="range" id="gen-steps" min="10" max="200" step="10" value="50"></label>
+            <label class="ctl"><span>Samples (uncertainty) <b id="gen-n-v">1</b></span><input type="range" id="gen-n" min="1" max="8" value="1"></label>
+            <label class="ctl" id="gen-res-box"><span>Residual tumor after surgery <b id="gen-res-v">0.25</b></span><input type="range" id="gen-res" min="0" max="1" step="0.05" value="0.25"></label>
+            <label class="ctl" id="gen-grow-box"><span>Growth (pixels) <b id="gen-grow-v">11</b></span><input type="range" id="gen-grow" min="3" max="31" step="2" value="11"></label>
+            <label class="ctl"><span>Seed</span><input type="number" id="gen-seed" value="0"></label>
+            <button class="btn primary" id="btn-gen" data-icon="sparkles">Generate</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <div class="panel"><h3 data-icon="image">Results<span class="right" id="gen-info"></span></h3><div id="gen-images"><div class="empty">Choose a patient and click <b>Generate</b>.</div></div></div>
+          <div class="panel"><h3 data-icon="target">Metrics</h3><div id="gen-metrics" class="note">—</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. MODELS & REPORTS -->
+    <section class="page" id="page-models">
+      <div class="page-head"><div><h2>Model Comparison &amp; Reports</h2><p>Test-set results written by the evaluation notebooks (<code>results/eval/*.json</code>) and patient reports.</p></div></div>
+      <div class="panel no-print"><h3 data-icon="table">Segmentation models — test set</h3><div id="cmp-table"></div></div>
+      <div class="grid g3 no-print" style="margin-top:16px">
+        <div class="panel"><h3 data-icon="bars">Dice per region</h3><div class="chart-box"><canvas id="ch-cmp-dice"></canvas></div></div>
+        <div class="panel"><h3 data-icon="bars">HD95 per region (mm, lower is better)</h3><div class="chart-box"><canvas id="ch-cmp-hd"></canvas></div></div>
+        <div class="panel"><h3 data-icon="trend">Validation Dice during training</h3><div class="chart-box"><canvas id="ch-cmp-hist"></canvas></div></div>
+      </div>
+      <div class="grid g2 no-print" style="margin-top:16px">
+        <div class="panel"><h3 data-icon="dots">Per-patient WT Dice</h3><div class="chart-box"><canvas id="ch-cmp-cases"></canvas></div></div>
+        <div class="panel"><h3 data-icon="doc">Other evaluations</h3><div id="cmp-other"></div></div>
+      </div>
+      <div class="panel no-print" style="margin-top:16px"><h3 data-icon="doc">Patient report</h3>
+        <div class="toolbar"><select id="rep-model"><option value="">Ground truth only</option></select>
+          <button class="btn primary" id="btn-report" data-icon="doc">Generate report</button><button class="btn" id="btn-print" data-icon="print" disabled>Print / PDF</button></div>
+        <p class="note">The report uses the patient selected in the top bar.</p></div>
+      <div id="report-view" style="margin-top:16px"></div>
+    </section>
+  </div>
+</div>
+
+<div class="modal" id="upload-modal"><div class="panel">
+  <h3 data-icon="upload">Import MRI</h3>
+  <p class="note">NIfTI (.nii / .nii.gz) or a .zip containing one DICOM series per sequence. FLAIR is required; all sequences are resampled to the FLAIR grid and to 1 mm. The full AI analysis (segmentation + grade) starts automatically and needs the 4 sequences. Best results on skull-stripped images, like BraTS.</p>
+  <form id="upload-form" style="display:grid;grid-template-columns:90px 1fr;gap:10px;align-items:center;margin-top:10px">
+    <span>Name</span><input type="text" name="name" placeholder="optional">
+    <span>FLAIR *</span><input type="file" name="flair" required>
+    <span>T1</span><input type="file" name="t1"><span>T1ce</span><input type="file" name="t1ce">
+    <span>T2</span><input type="file" name="t2"><span>Seg (GT)</span><input type="file" name="seg">
+  </form>
+  <div class="toolbar" style="margin:16px 0 0;justify-content:flex-end"><button class="btn" id="up-cancel">Cancel</button><button class="btn primary" id="up-send" data-icon="upload">Import</button></div>
+</div></div>
+<div class="loading" id="loading"><div class="spin"></div><span id="loading-txt">Working…</span></div>
+<div class="toast" id="toast"></div>
+<script type="module" src="static/app.js"></script>
+</body>
+</html>
