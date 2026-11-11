@@ -199,4 +199,4 @@ them). Get the data from the official BraTS 2020 source.
 
 References: Menze et al., IEEE TMI 2015 · Bakas et al., Scientific Data 2017 · Bakas et al., arXiv:1811.02629 · MONAI.
 
-Author: **Safa Douma** · Code under the [MIT License](LICENSE).
+Author: **Safa Douma ** & **Khadija Bensaad**· Code under the [MIT License](LICENSE).
